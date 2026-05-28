@@ -8,216 +8,117 @@ app.secret_key = 'francois_resort_secret_key_2026'
 def init_db():
     conn = sqlite3.connect("francois_resort.db")
     cursor = conn.cursor()
-    
     cursor.executescript("""
-    CREATE TABLE IF NOT EXISTS users (
-        user_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        username TEXT UNIQUE,
-        password TEXT,
-        role TEXT,
-        full_name TEXT
-    );
-    CREATE TABLE IF NOT EXISTS hotel_info (
-        hotel_id INTEGER PRIMARY KEY,
-        hotel_name TEXT,
-        location TEXT,
-        director TEXT,
-        manager TEXT,
-        total_rooms INTEGER
-    );
-    CREATE TABLE IF NOT EXISTS rooms (
-        room_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        room_number TEXT UNIQUE,
-        room_type TEXT,
-        status TEXT DEFAULT 'Available'
-    );
-    CREATE TABLE IF NOT EXISTS bookings (
-        booking_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        guest_name TEXT,
-        checkin TEXT,
-        checkout TEXT,
-        room_type TEXT,
-        guests INTEGER,
-        status TEXT DEFAULT 'Confirmed',
-        booked_by TEXT,
-        booking_date TEXT
-    );
+    CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, username TEXT UNIQUE, password TEXT, role TEXT, full_name TEXT);
+    CREATE TABLE IF NOT EXISTS hotel_info (hotel_id INTEGER PRIMARY KEY, hotel_name TEXT, location TEXT, director TEXT, manager TEXT, total_rooms INTEGER);
     """)
-    
     cursor.execute("DELETE FROM hotel_info")
-    cursor.execute("""INSERT OR IGNORE INTO hotel_info 
-        VALUES (1, 'Francois Resort and Spur', 'Mombasa next to Club Volume', 'Francis Mbugua', 'Joseph Kamaru', 350)""")
-    
-    cursor.execute("DELETE FROM rooms")
-    room_types = ["Deluxe Room", "Junior Suite", "Presidential Suite", "Standard Room", "Twin Room", "Double Room"]
-    for i in range(1, 51):
-        cursor.execute("INSERT INTO rooms (room_number, room_type) VALUES (?, ?)", 
-                      (f"R{str(i).zfill(3)}", room_types[i % len(room_types)]))
-    
+    cursor.execute("INSERT OR IGNORE INTO hotel_info VALUES (1, 'Francois Resort and Spur', 'Mombasa', 'Francis Mbugua', 'Joseph Kamaru', 350)")
     cursor.execute("DELETE FROM users")
-    cursor.executemany("INSERT INTO users (username, password, role, full_name) VALUES (?, ?, ?, ?)", [
-        ("Francis Mbugua", "FM@2026", "Director", "Francis Mbugua"),
-        ("Joseph Kamaru", "JK@2026", "Manager", "Joseph Kamaru"),
-        ("reception", "reception123", "Receptionist", "Reception Staff")
-    ])
-    
+    cursor.execute("INSERT OR IGNORE INTO users (username, password, role, full_name) VALUES (?, ?, ?, ?)", 
+                   ("Francis Mbugua", "FM@2026", "Director", "Francis Mbugua"))
     conn.commit()
     conn.close()
 
 init_db()
 
-SHARED_STYLES = """
-<style>
-    :root { --primary: #1e88e5; --dark: #0d47a1; --success: #4CAF50; }
-    * { margin:0; padding:0; box-sizing:border-box; font-family: 'Segoe UI', sans-serif; }
-    body { background: #f5f7fa; }
-    .sidebar { width: 260px; background: white; height: 100vh; position: fixed; box-shadow: 2px 0 10px rgba(0,0,0,0.1); overflow-y:auto; }
-    .main-content { margin-left: 260px; padding: 30px; }
-    .card { background: white; border-radius: 12px; box-shadow: 0 5px 15px rgba(0,0,0,0.08); padding: 25px; margin-bottom: 20px; }
-    .avatar { width: 170px; height: 170px; border-radius: 50%; overflow: hidden; border: 6px solid #1e88e5; box-shadow: 0 10px 25px rgba(0,0,0,0.15); }
-    .avatar img { width: 100%; height: 100%; object-fit: cover; }
-</style>
-"""
-
-# Login
 @app.route('/', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
-        conn = sqlite3.connect("francois_resort.db")
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM users WHERE username=? AND password=?", (username, password))
-        user = cursor.fetchone()
-        conn.close()
-        if user:
-            session['username'] = user[1]
-            session['role'] = user[3]
-            session['full_name'] = user[4]
+        if request.form['username'] == "Francis Mbugua" and request.form['password'] == "FM@2026":
+            session['username'] = "Francis Mbugua"
             return redirect(url_for('dashboard'))
-        else:
-            return "<h3 style='color:red;text-align:center;margin-top:50px'>Invalid credentials!</h3>"
-    return f'''
-        {SHARED_STYLES}
-        <div style="height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#1e88e5,#0d47a1);">
-            <div class="card" style="width:400px;padding:40px;text-align:center;">
-                <h1 style="color:var(--dark);">🏨 Francois Resort</h1>
-                <p style="color:#666;">and Spur - Mombasa</p>
-                <form method="post">
-                    <input type="text" name="username" placeholder="Username" required style="width:100%;padding:12px;margin:10px 0;border:1px solid #ddd;border-radius:8px;">
-                    <input type="password" name="password" placeholder="Password" required style="width:100%;padding:12px;margin:10px 0;border:1px solid #ddd;border-radius:8px;">
-                    <button type="submit" style="width:100%;padding:14px;background:var(--primary);color:white;border:none;border-radius:8px;">Login</button>
-                </form>
-            </div>
+    return '''<div style="height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#10b981,#0f766e);font-family:Segoe UI;">
+        <div style="background:white;padding:50px;border-radius:16px;width:400px;text-align:center;box-shadow:0 10px 30px rgba(0,0,0,0.1);">
+            <h1 style="color:#10b981;">Francois Resort</h1>
+            <p style="color:#666;margin:10px 0 30px;">Modern Villa Management System</p>
+            <form method="post">
+                <input type="text" name="username" placeholder="Username" required style="width:100%;padding:14px;margin:10px 0;border:1px solid #ddd;border-radius:8px;">
+                <input type="password" name="password" placeholder="Password" required style="width:100%;padding:14px;margin:10px 0;border:1px solid #ddd;border-radius:8px;">
+                <button type="submit" style="width:100%;padding:16px;background:#10b981;color:white;border:none;border-radius:8px;">Sign In</button>
+            </form>
         </div>
-    '''
+    </div>'''
 
-# Dashboard - Hotel Management Face
 @app.route('/dashboard')
 def dashboard():
     if 'username' not in session: return redirect(url_for('login'))
-    conn = sqlite3.connect("francois_resort.db")
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM hotel_info")
-    hotel = cursor.fetchone()
-    cursor.execute("SELECT COUNT(*) FROM bookings")
-    total_bookings = cursor.fetchone()[0]
-    cursor.execute("SELECT COUNT(*) FROM rooms WHERE status='Available'")
-    available_rooms = cursor.fetchone()[0]
-    conn.close()
     
-    management_photo = "https://images.unsplash.com/photo-1560250097-0b93528c311a?w=400"  # Professional management look
-    
-    return f'''
-        {SHARED_STYLES}
-        <div style="display:flex;height:100vh;">
-            <div class="sidebar">
-                <div style="padding:25px;border-bottom:1px solid #eee;">
-                    <h2 style="color:var(--dark);">Francois Resort</h2>
-                    <small>Mombasa • 5-Star</small>
-                </div>
-                <div style="padding:20px;">
-                    <a href="/dashboard" style="display:block;padding:12px 15px;background:#e3f2fd;color:var(--dark);border-radius:8px;margin:5px 0;text-decoration:none;">📊 Dashboard</a>
-                    <a href="/rooms" style="display:block;padding:12px 15px;color:#333;border-radius:8px;margin:5px 0;text-decoration:none;">🛏️ Rooms</a>
-                    <a href="/booking" style="display:block;padding:12px 15px;color:#333;border-radius:8px;margin:5px 0;text-decoration:none;">🛎️ New Booking</a>
-                    <a href="/bookings" style="display:block;padding:12px 15px;color:#333;border-radius:8px;margin:5px 0;text-decoration:none;">📋 All Bookings</a>
-                    <a href="/staff" style="display:block;padding:12px 15px;color:#333;border-radius:8px;margin:5px 0;text-decoration:none;">👥 Staff & Interns</a>
-                    <a href="/logout" style="display:block;padding:12px 15px;color:#d32f2f;border-radius:8px;margin:5px 0;text-decoration:none;">🚪 Logout</a>
-                </div>
+    return '''
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Francois Resort - Dashboard</title>
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        <style>
+            body { margin:0; font-family:Segoe UI; background:#f8fafc; }
+            .sidebar { width: 240px; background:#1e2937; color:white; height:100vh; position:fixed; padding:20px 0; }
+            .main { margin-left:240px; padding:20px; }
+            .card { background:white; border-radius:12px; padding:20px; box-shadow:0 5px 15px rgba(0,0,0,0.08); }
+            .topbar { background:white; padding:15px 30px; box-shadow:0 2px 10px rgba(0,0,0,0.1); display:flex; justify-content:space-between; align-items:center; }
+            .stat-card { padding:20px; border-radius:12px; color:white; text-align:center; }
+        </style>
+    </head>
+    <body>
+        <div class="sidebar">
+            <h2 style="padding:0 20px;color:#10b981;">Francois Resort</h2>
+            <div style="padding:20px;">
+                <a href="/dashboard" style="display:block;padding:12px 20px;color:white;background:#10b981;border-radius:8px;margin:8px 0;text-decoration:none;">Dashboard</a>
+                <a href="#" style="display:block;padding:12px 20px;color:#cbd5e1;border-radius:8px;margin:8px 0;text-decoration:none;">New Booking</a>
+                <a href="#" style="display:block;padding:12px 20px;color:#cbd5e1;border-radius:8px;margin:8px 0;text-decoration:none;">Rooms</a>
+                <a href="#" style="display:block;padding:12px 20px;color:#cbd5e1;border-radius:8px;margin:8px 0;text-decoration:none;">Bookings</a>
+                <a href="#" style="display:block;padding:12px 20px;color:#cbd5e1;border-radius:8px;margin:8px 0;text-decoration:none;">Staff</a>
             </div>
-            <div class="main-content">
-                <div style="display:flex;align-items:center;gap:20px;margin-bottom:30px;">
-                    <div class="avatar" style="width:90px;height:90px;">
-                        <img src="{management_photo}" alt="Management">
-                    </div>
-                    <div>
-                        <h1>Welcome back, {session['full_name']} 👋</h1>
-                        <p style="color:#666;">Hotel Director</p>
-                    </div>
+        </div>
+        
+        <div class="main">
+            <div class="topbar">
+                <h2>Dashboard</h2>
+                <div>Welcome, Francis Mbugua</div>
+            </div>
+            
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:20px;margin:30px 0;">
+                <div class="stat-card" style="background:#3b82f6;">872 New Booking</div>
+                <div class="stat-card" style="background:#10b981;">285 Schedule Room</div>
+                <div class="stat-card" style="background:#f59e0b;">53 Check-in</div>
+                <div class="stat-card" style="background:#ef4444;">78 Check-out</div>
+            </div>
+            
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+                <div class="card">
+                    <h3>Available Rooms Today</h3>
+                    <canvas id="pieChart" height="180"></canvas>
                 </div>
-                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px;">
-                    <div class="card"><h2>{hotel[5]}</h2><p>Total Rooms</p></div>
-                    <div class="card"><h2>{available_rooms}</h2><p>Available Rooms</p></div>
-                    <div class="card"><h2>{total_bookings}</h2><p>Active Bookings</p></div>
+                <div class="card">
+                    <h3>Reservation Statistics</h3>
+                    <canvas id="lineChart" height="180"></canvas>
                 </div>
             </div>
         </div>
+        
+        <script>
+            new Chart(document.getElementById('pieChart'), {
+                type: 'doughnut',
+                data: {
+                    labels: ['Occupied', 'Available'],
+                    datasets: [{ data: [215, 135], backgroundColor: ['#3b82f6', '#10b981'] }]
+                }
+            });
+            
+            new Chart(document.getElementById('lineChart'), {
+                type: 'line',
+                data: {
+                    labels: ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
+                    datasets: [
+                        { label: 'Bookings', data: [45,52,48,65,72,68,75], borderColor: '#3b82f6', tension: 0.4 },
+                        { label: 'Check-ins', data: [28,35,30,42,50,48,55], borderColor: '#10b981', tension: 0.4 }
+                    ]
+                }
+            });
+        </script>
+    </body>
+    </html>
     '''
-
-# Guest Booking - Guest Face
-@app.route('/booking')
-def booking():
-    if 'username' not in session: return redirect(url_for('login'))
-    guest_photo = "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400"
-    
-    return f'''
-        {SHARED_STYLES}
-        <style>.booking-container {{display:flex;min-height:100vh;}} .guest-sidebar {{width:380px;background:white;padding:40px 25px;box-shadow:3px 0 15px rgba(0,0,0,0.1);text-align:center;}}</style>
-        <div class="booking-container">
-            <div class="guest-sidebar">
-                <div class="avatar">
-                    <img src="{guest_photo}" alt="Guest">
-                </div>
-                <h2>Emily Wanjiku</h2>
-                <p style="color:#666;">emily.wanjiku@gmail.com</p>
-                <p style="color:#666;">📞 +254 711 234 567</p>
-                <p style="color:#4CAF50;font-weight:bold;margin-top:30px;">✓ Verified Guest</p>
-            </div>
-            <div style="flex:1;padding:40px;">
-                <div class="card" style="max-width:700px;">
-                    <h1>New Guest Booking</h1>
-                    <p>Francois Resort and Spur • Mombasa</p>
-                    <form method="POST" action="/confirm_booking">
-                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
-                            <div><label>Check-in</label><input type="date" name="checkin" required style="width:100%;padding:12px;margin:8px 0;border:1px solid #ddd;border-radius:8px;"></div>
-                            <div><label>Check-out</label><input type="date" name="checkout" required style="width:100%;padding:12px;margin:8px 0;border:1px solid #ddd;border-radius:8px;"></div>
-                        </div>
-                        <label>Room Type</label>
-                        <select name="room_type" style="width:100%;padding:12px;margin:8px 0;border:1px solid #ddd;border-radius:8px;">
-                            <option>Deluxe Room</option><option>Junior Suite</option><option>Presidential Suite</option>
-                            <option>Standard Room</option><option>Twin Room</option><option>Double Room</option>
-                        </select>
-                        <label>Number of Guests</label>
-                        <input type="number" name="guests" value="2" min="1" style="width:100%;padding:12px;margin:8px 0;border:1px solid #ddd;border-radius:8px;">
-                        <button type="submit" style="width:100%;padding:16px;background:#1e88e5;color:white;border:none;border-radius:8px;margin-top:20px;">Confirm Booking</button>
-                    </form>
-                </div>
-            </div>
-        </div>
-    '''
-
-@app.route('/confirm_booking', methods=['POST'])
-def confirm_booking():
-    if 'username' not in session: return redirect(url_for('login'))
-    conn = sqlite3.connect("francois_resort.db")
-    cursor = conn.cursor()
-    cursor.execute("""INSERT INTO bookings (guest_name, checkin, checkout, room_type, guests, booked_by, booking_date) 
-                      VALUES (?, ?, ?, ?, ?, ?, ?)""", 
-                   ("Emily Wanjiku", request.form['checkin'], request.form['checkout'], request.form['room_type'], request.form['guests'], session['full_name'], datetime.now().strftime("%Y-%m-%d")))
-    conn.commit()
-    conn.close()
-    return '''<h2 style="text-align:center;margin-top:100px;color:#4CAF50;">✅ Booking Confirmed Successfully!</h2>
-              <p style="text-align:center;"><a href="/dashboard">← Back to Dashboard</a></p>'''
 
 @app.route('/logout')
 def logout():
