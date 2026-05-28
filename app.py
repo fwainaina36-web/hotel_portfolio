@@ -79,7 +79,7 @@ SHARED_STYLES = """
 </style>
 """
 
-# Login Page
+# Login
 @app.route('/', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -112,7 +112,7 @@ def login():
         </div>
     '''
 
-# Dashboard with Management Face
+# Dashboard - Hotel Management Face
 @app.route('/dashboard')
 def dashboard():
     if 'username' not in session: return redirect(url_for('login'))
@@ -126,7 +126,7 @@ def dashboard():
     available_rooms = cursor.fetchone()[0]
     conn.close()
     
-    director_photo = "https://images.unsplash.com/photo-1560250097-0b93528c311a?w=400"  # Professional management look
+    management_photo = "https://images.unsplash.com/photo-1560250097-0b93528c311a?w=400"  # Professional management look
     
     return f'''
         {SHARED_STYLES}
@@ -147,11 +147,11 @@ def dashboard():
             </div>
             <div class="main-content">
                 <div style="display:flex;align-items:center;gap:20px;margin-bottom:30px;">
-                    <div class="avatar" style="width:90px;height:90px;border:4px solid var(--primary);">
-                        <img src="{director_photo}" alt="Director">
+                    <div class="avatar" style="width:90px;height:90px;">
+                        <img src="{management_photo}" alt="Management">
                     </div>
                     <div>
-                        <h1>Welcome back, {session['full_name']}</h1>
+                        <h1>Welcome back, {session['full_name']} 👋</h1>
                         <p style="color:#666;">Hotel Director</p>
                     </div>
                 </div>
@@ -164,8 +164,60 @@ def dashboard():
         </div>
     '''
 
-# Other routes (Staff, Rooms, Booking, etc.) are included in full version. 
-# For now, this is the core.
+# Guest Booking - Guest Face
+@app.route('/booking')
+def booking():
+    if 'username' not in session: return redirect(url_for('login'))
+    guest_photo = "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400"
+    
+    return f'''
+        {SHARED_STYLES}
+        <style>.booking-container {{display:flex;min-height:100vh;}} .guest-sidebar {{width:380px;background:white;padding:40px 25px;box-shadow:3px 0 15px rgba(0,0,0,0.1);text-align:center;}}</style>
+        <div class="booking-container">
+            <div class="guest-sidebar">
+                <div class="avatar">
+                    <img src="{guest_photo}" alt="Guest">
+                </div>
+                <h2>Emily Wanjiku</h2>
+                <p style="color:#666;">emily.wanjiku@gmail.com</p>
+                <p style="color:#666;">📞 +254 711 234 567</p>
+                <p style="color:#4CAF50;font-weight:bold;margin-top:30px;">✓ Verified Guest</p>
+            </div>
+            <div style="flex:1;padding:40px;">
+                <div class="card" style="max-width:700px;">
+                    <h1>New Guest Booking</h1>
+                    <p>Francois Resort and Spur • Mombasa</p>
+                    <form method="POST" action="/confirm_booking">
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+                            <div><label>Check-in</label><input type="date" name="checkin" required style="width:100%;padding:12px;margin:8px 0;border:1px solid #ddd;border-radius:8px;"></div>
+                            <div><label>Check-out</label><input type="date" name="checkout" required style="width:100%;padding:12px;margin:8px 0;border:1px solid #ddd;border-radius:8px;"></div>
+                        </div>
+                        <label>Room Type</label>
+                        <select name="room_type" style="width:100%;padding:12px;margin:8px 0;border:1px solid #ddd;border-radius:8px;">
+                            <option>Deluxe Room</option><option>Junior Suite</option><option>Presidential Suite</option>
+                            <option>Standard Room</option><option>Twin Room</option><option>Double Room</option>
+                        </select>
+                        <label>Number of Guests</label>
+                        <input type="number" name="guests" value="2" min="1" style="width:100%;padding:12px;margin:8px 0;border:1px solid #ddd;border-radius:8px;">
+                        <button type="submit" style="width:100%;padding:16px;background:#1e88e5;color:white;border:none;border-radius:8px;margin-top:20px;">Confirm Booking</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    '''
+
+@app.route('/confirm_booking', methods=['POST'])
+def confirm_booking():
+    if 'username' not in session: return redirect(url_for('login'))
+    conn = sqlite3.connect("francois_resort.db")
+    cursor = conn.cursor()
+    cursor.execute("""INSERT INTO bookings (guest_name, checkin, checkout, room_type, guests, booked_by, booking_date) 
+                      VALUES (?, ?, ?, ?, ?, ?, ?)""", 
+                   ("Emily Wanjiku", request.form['checkin'], request.form['checkout'], request.form['room_type'], request.form['guests'], session['full_name'], datetime.now().strftime("%Y-%m-%d")))
+    conn.commit()
+    conn.close()
+    return '''<h2 style="text-align:center;margin-top:100px;color:#4CAF50;">✅ Booking Confirmed Successfully!</h2>
+              <p style="text-align:center;"><a href="/dashboard">← Back to Dashboard</a></p>'''
 
 @app.route('/logout')
 def logout():
