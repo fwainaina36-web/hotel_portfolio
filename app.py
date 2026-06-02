@@ -28,15 +28,22 @@ def init_db():
         interns INTEGER
     )""")
 
-    # 3. Rooms Table
+    # 3. Rooms Table (Upgraded with Housekeeping Status tracking column)
     cursor.execute("""CREATE TABLE IF NOT EXISTS rooms(
         room_number INTEGER PRIMARY KEY,
         room_type TEXT,
         status TEXT DEFAULT 'Available',
         price REAL,
         floor INTEGER,
-        description TEXT
+        description TEXT,
+        housekeeping_status TEXT DEFAULT 'Inspected'
     )""")
+
+    # Core Auto-Migration Check: Safe-inject housekeeping_status column if it doesn't exist yet
+    cursor.execute("PRAGMA table_info(rooms)")
+    columns = [col[1] for col in cursor.fetchall()]
+    if "housekeeping_status" not in columns:
+        cursor.execute("ALTER TABLE rooms ADD COLUMN housekeeping_status TEXT DEFAULT 'Inspected'")
 
     # 4. Bookings Table
     cursor.execute("""CREATE TABLE IF NOT EXISTS bookings(
@@ -78,31 +85,26 @@ def init_db():
     cursor.execute("SELECT COUNT(*) FROM rooms")
     if cursor.fetchone()[0] == 0:
         rooms = []
-        for i in range(101, 191): rooms.append((i, "Standard", "Available", 18500, 1, "Standard Room"))
-        for i in range(201, 256): rooms.append((i, "Deluxe", "Available", 28500, 2, "Deluxe Room"))
-        for i in range(301, 361): rooms.append((i, "Executive", "Available", 42000, 3, "Executive Room"))
-        for i in range(401, 406): rooms.append((i, "Presidential Suite", "Available", 95000, 4, "Presidential Suite"))
-        for i in range(501, 571): rooms.append((i, "Double", "Available", 22500, 5, "Double Room"))
-        for i in range(601, 661): rooms.append((i, "Twin", "Available", 23500, 6, "Twin Room"))
-        for i in range(701, 711): rooms.append((i, "Junior Suite", "Available", 55000, 7, "Junior Suite"))
-        cursor.executemany("INSERT INTO rooms VALUES(?,?,?,?,?,?)", rooms)
+        for i in range(101, 191): rooms.append((i, "Standard", "Available", 18500, 1, "Standard Room", "Inspected"))
+        for i in range(201, 256): rooms.append((i, "Deluxe", "Available", 28500, 2, "Deluxe Room", "Inspected"))
+        for i in range(301, 361): rooms.append((i, "Executive", "Available", 42000, 3, "Executive Room", "Inspected"))
+        for i in range(401, 406): rooms.append((i, "Presidential Suite", "Available", 95000, 4, "Presidential Suite", "Inspected"))
+        for i in range(501, 571): rooms.append((i, "Double", "Available", 22500, 5, "Double Room", "Inspected"))
+        for i in range(601, 661): rooms.append((i, "Twin", "Available", 23500, 6, "Twin Room", "Inspected"))
+        for i in range(701, 711): rooms.append((i, "Junior Suite", "Available", 55000, 7, "Junior Suite", "Inspected"))
+        cursor.executemany("INSERT INTO rooms VALUES(?,?,?,?,?,?,?)", rooms)
 
     # Seed Baseline Pricing Structures
     rates = [("Standard", 18500), ("Deluxe", 28500), ("Executive", 42000), 
              ("Presidential Suite", 95000), ("Double", 22500), ("Twin", 23500), ("Junior Suite", 55000)]
     cursor.executemany("INSERT OR IGNORE INTO pricing_rates VALUES(?,?)", rates)
 
-    # Seed Default Dummy Staff Details
-    cursor.execute("SELECT COUNT(*) FROM staff_members")
-    if cursor.fetchone()[0] == 0:
-        cursor.execute("INSERT INTO staff_members (name, role, salary, phone) VALUES (?, ?, ?, ?)", ("Alice Wanjiku", "Receptionist", 45000, "+254711223344"))
-        cursor.execute("INSERT INTO staff_members (name, role, salary, phone) VALUES (?, ?, ?, ?)", ("John Mwangi", "Chef", 65000, "+254722334455"))
-
     conn.commit()
     conn.close()
 
 init_db()
 
+# ========================= BASE LAYOUT TEMPLATE =========================
 # ========================= BASE LAYOUT TEMPLATE =========================
 BASE_LAYOUT = """
 <!DOCTYPE html>
@@ -113,7 +115,7 @@ BASE_LAYOUT = """
     <title>{{ title }} - François Resort</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght=300;400;500;600;700&display=swap" rel="stylesheet">
     <style>body { font-family: 'Poppins', sans-serif; }</style>
 </head>
 <body class="bg-slate-50 flex min-h-screen">
@@ -126,22 +128,25 @@ BASE_LAYOUT = """
                 <span class="text-2xl font-bold tracking-wide text-white">HOTEL</span>
             </div>
             <nav class="space-y-1">
-                <a href="/dashboard" class="flex items-center gap-4 px-4 py-3 rounded-xl transition duration-200 {% if active == 'dashboard' %} bg-emerald-500 text-white font-medium {% else %} hover:bg-slate-800 text-slate-400 hover:text-white {% endif %}">
+                <a href="/dashboard" class="flex items-center gap-4 px-4 py-3 rounded-xl transition duration-200 {% if active == 'dashboard' %} bg-emerald-50 text-white font-medium {% else %} hover:bg-slate-800 text-slate-400 hover:text-white {% endif %}">
                     <span>📊</span> Dashboard
                 </a>
-                <a href="/bookings" class="flex items-center gap-4 px-4 py-3 rounded-xl transition duration-200 {% if active == 'bookings' %} bg-emerald-500 text-white font-medium {% else %} hover:bg-slate-800 text-slate-400 hover:text-white {% endif %}">
+                <a href="/bookings" class="flex items-center gap-4 px-4 py-3 rounded-xl transition duration-200 {% if active == 'bookings' %} bg-emerald-50 text-white font-medium {% else %} hover:bg-slate-800 text-slate-400 hover:text-white {% endif %}">
                     <span>📅</span> Booking
                 </a>
-                <a href="/rooms" class="flex items-center gap-4 px-4 py-3 rounded-xl transition duration-200 {% if active == 'rooms' %} bg-emerald-500 text-white font-medium {% else %} hover:bg-slate-800 text-slate-400 hover:text-white {% endif %}">
+                <a href="/rooms" class="flex items-center gap-4 px-4 py-3 rounded-xl transition duration-200 {% if active == 'rooms' %} bg-emerald-50 text-white font-medium {% else %} hover:bg-slate-800 text-slate-400 hover:text-white {% endif %}">
                     <span>🛏️</span> Rooms
                 </a>
-                <a href="/customers" class="flex items-center gap-4 px-4 py-3 rounded-xl transition duration-200 {% if active == 'customers' %} bg-emerald-500 text-white font-medium {% else %} hover:bg-slate-800 text-slate-400 hover:text-white {% endif %}">
+                <a href="/housekeeping" class="flex items-center gap-4 px-4 py-3 rounded-xl transition duration-200 {% if active == 'housekeeping' %} bg-emerald-50 text-white font-medium {% else %} hover:bg-slate-800 text-slate-400 hover:text-white {% endif %}">
+                    <span>🧹</span> Housekeeping
+                </a>
+                <a href="/customers" class="flex items-center gap-4 px-4 py-3 rounded-xl transition duration-200 {% if active == 'customers' %} bg-emerald-50 text-white font-medium {% else %} hover:bg-slate-800 text-slate-400 hover:text-white {% endif %}">
                     <span>👥</span> Customers
                 </a>
-                <a href="/staff" class="flex items-center gap-4 px-4 py-3 rounded-xl transition duration-200 {% if active == 'staff' %} bg-emerald-500 text-white font-medium {% else %} hover:bg-slate-800 text-slate-400 hover:text-white {% endif %}">
+                <a href="/staff" class="flex items-center gap-4 px-4 py-3 rounded-xl transition duration-200 {% if active == 'staff' %} bg-emerald-50 text-white font-medium {% else %} hover:bg-slate-800 text-slate-400 hover:text-white {% endif %}">
                     <span>👔</span> Staff
                 </a>
-                <a href="/pricing" class="flex items-center gap-4 px-4 py-3 rounded-xl transition duration-200 {% if active == 'pricing' %} bg-emerald-500 text-white font-medium {% else %} hover:bg-slate-800 text-slate-400 hover:text-white {% endif %}">
+                <a href="/pricing" class="flex items-center gap-4 px-4 py-3 rounded-xl transition duration-200 {% if active == 'pricing' %} bg-emerald-50 text-white font-medium {% else %} hover:bg-slate-800 text-slate-400 hover:text-white {% endif %}">
                     <span>💰</span> Pricing
                 </a>
             </nav>
@@ -160,16 +165,41 @@ BASE_LAYOUT = """
 
     <!-- Main Workspace Container -->
     <div class="flex-1 ml-72 flex flex-col">
-        <!-- Top Sticky Header -->
+        <!-- Top Sticky Header with Dropdown Engine -->
         <header class="bg-white border-b border-slate-100 px-10 py-4 flex items-center justify-between sticky top-0 z-50">
             <div class="relative w-96">
                 <input type="text" placeholder="Search here..." class="w-full bg-slate-100 text-sm pl-5 pr-10 py-2.5 rounded-full border border-transparent focus:outline-none focus:border-emerald-500 transition">
                 <span class="absolute right-4 top-3 text-slate-400 text-sm">🔍</span>
             </div>
-            <div class="flex items-center gap-6">
-                <button class="relative text-slate-500 hover:text-emerald-500 text-xl">
-                    🔔<span class="absolute -top-1 -right-1 bg-emerald-500 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-bold">3</span>
+            
+            <div class="flex items-center gap-6 relative">
+                <!-- Interactive Bell Button -->
+                <button onclick="toggleNotificationMenu(event)" class="relative text-slate-500 hover:text-emerald-500 text-xl focus:outline-none p-2 transition">
+                    🔔<span id="notif-badge" class="absolute top-1 right-1 bg-emerald-500 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-bold shadow-sm">3</span>
                 </button>
+
+                <!-- Hidden Notifications Panel -->
+                <div id="notification-dropdown" class="hidden absolute right-32 top-12 w-80 bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden transition-all duration-200">
+                    <div class="p-4 bg-slate-900 text-white flex justify-between items-center">
+                        <span class="font-bold text-sm">System Notifications</span>
+                        <span onclick="clearNotifications(event)" class="text-[11px] bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded cursor-pointer transition text-slate-300">Clear All</span>
+                    </div>
+                    <div class="divide-y divide-slate-50 max-h-72 overflow-y-auto">
+                        <div class="p-4 hover:bg-slate-50 transition cursor-pointer">
+                            <p class="text-xs font-bold text-slate-800">✨ Room 402 Inspected</p>
+                            <p class="text-[11px] text-slate-400 mt-0.5">Housekeeping changed status to Ready for VIP Check-In.</p>
+                        </div>
+                        <div class="p-4 hover:bg-slate-50 transition cursor-pointer">
+                            <p class="text-xs font-bold text-amber-600">⚠️ Room 104 Checked Out</p>
+                            <p class="text-[11px] text-slate-400 mt-0.5">Reservation cancelled. Front desk auto-flagged room status to Dirty.</p>
+                        </div>
+                        <div class="p-4 hover:bg-slate-50 transition cursor-pointer">
+                            <p class="text-xs font-bold text-indigo-600">📈 Global Price Matrix Adjusted</p>
+                            <p class="text-[11px] text-slate-400 mt-0.5">Base pricing rates updated across all Presidential Suites.</p>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="w-[1px] h-6 bg-slate-200"></div>
                 <span class="text-sm text-slate-600 font-medium">System Status: <span class="text-emerald-500 font-bold">Live</span></span>
             </div>
@@ -181,10 +211,39 @@ BASE_LAYOUT = """
         </main>
     </div>
 
+    <!-- Dropdown Interactivity Controller Scripts -->
+    <script>
+        function toggleNotificationMenu(event) {
+            event.stopPropagation();
+            const panel = document.getElementById('notification-dropdown');
+            panel.classList.toggle('hidden');
+        }
+
+        function clearNotifications(event) {
+            event.stopPropagation();
+            const badge = document.getElementById('notif-badge');
+            if (badge) badge.remove();
+            
+            const dropdown = document.getElementById('notification-dropdown');
+            dropdown.querySelector('.divide-y').innerHTML = `
+                <div class="p-8 text-center text-slate-400 text-xs">
+                    No new administrative alerts at this time.
+                </div>
+            `;
+        }
+
+        // Close panel automatically if clicking anywhere else on screen
+        document.addEventListener('click', function() {
+            const panel = document.getElementById('notification-dropdown');
+            if (panel && !panel.classList.contains('hidden')) {
+                panel.classList.add('hidden');
+            }
+        });
+    </script>
+
 </body>
 </html>
 """
-
 # ========================= APPLICATION CONTROLLER ROUTES =========================
 
 @app.route("/", methods=["GET", "POST"])
@@ -225,7 +284,7 @@ def dashboard():
     total_rooms = conn.execute("SELECT COUNT(*) FROM rooms").fetchone()[0]
     available_rooms = conn.execute("SELECT COUNT(*) FROM rooms WHERE status='Available'").fetchone()[0]
     total_bookings = conn.execute("SELECT COUNT(*) FROM bookings WHERE status='Confirmed'").fetchone()[0]
-    total_collections = conn.execute("SELECT IFNULL(SUM(amount), 0) FROM bookings WHERE status='Confirmed'").fetchone()[0]
+    total_collections = conn.execute("SELECT IFNULL(SUM(amount), 0) FROM bookings").fetchone()[0]
     
     breakdown = {}
     types = ["Standard", "Deluxe", "Executive", "Presidential Suite", "Double", "Twin", "Junior Suite"]
@@ -330,7 +389,7 @@ def rooms():
         conn.commit()
         conn.close()
         return redirect(url_for("rooms"))
-    rooms_list = conn.execute("SELECT * FROM rooms ORDER BY room_number").fetchall()
+    rooms_list = conn.execute("SELECT room_number, room_type, status, price, floor, description, housekeeping_status FROM rooms ORDER BY room_number").fetchall()
     conn.close()
 
     rooms_html = """
@@ -349,11 +408,10 @@ def rooms():
                     </select>
                 </div>
                 <div>
-                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Status</label>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Front Desk Status</label>
                     <select name="status" class="w-full px-4 py-3 border border-slate-200 rounded-xl bg-slate-50 text-sm focus:outline-none">
                         <option value="Available">Available</option>
                         <option value="Occupied">Occupied</option>
-                        <option value="Cleaning">Cleaning</option>
                     </select>
                 </div>
                 <div>
@@ -367,12 +425,13 @@ def rooms():
             <div class="overflow-x-auto max-h-[500px] border rounded-xl">
                 <table class="w-full text-left">
                     <tr class="bg-slate-50 text-xs text-slate-400 uppercase border-b">
-                        <th class="p-4">Room No</th><th class="p-4">Type</th><th class="p-4">Floor</th><th class="p-4">Base Rate</th><th class="p-4">Status</th>
+                        <th class="p-4">Room No</th><th class="p-4">Type</th><th class="p-4">Floor Map</th><th class="p-4">Base Rate</th><th class="p-4">Front Desk</th><th class="p-4">Housekeeping</th>
                     </tr>
                     {% for r in rooms_list %}
                     <tr class="text-sm border-b hover:bg-slate-50">
-                        <td class="p-4 font-bold text-slate-800">#{{ r[0] }}</td><td class="p-4">{{ r[1] }}</td><td class="p-4">Level {{ r[4] }}</td><td class="p-4 font-semibold">KES {{ "{:,.2f}".format(r[3]) }}</td>
+                        <td class="p-4 font-bold text-slate-800">#{{ r[0] }}</td><td class="p-4">{{ r[1] }}</td><td class="p-4">Floor Level {{ r[4] }}</td><td class="p-4 font-semibold">KES {{ "{:,.2f}".format(r[3]) }}</td>
                         <td class="p-4"><span class="px-2 py-1 rounded-full text-xs font-semibold {% if r[2]=='Available' %} bg-emerald-50 text-emerald-600 {% else %} bg-amber-50 text-amber-600 {% endif %}">{{ r[2] }}</span></td>
+                        <td class="p-4"><span class="px-2 py-1 rounded-full text-xs font-semibold {% if r[6]=='Inspected' %} bg-teal-50 text-teal-600 {% elif r[6]=='Cleaning' %} bg-amber-50 text-amber-600 {% else %} bg-rose-50 text-rose-600 {% endif %}">{{ r[6] }}</span></td>
                     </tr>
                     {% endfor %}
                 </table>
@@ -381,6 +440,72 @@ def rooms():
     </div>
     """
     return render_template_string(BASE_LAYOUT, title="Rooms", active="rooms", content=render_template_string(rooms_html, rooms_list=rooms_list))
+
+@app.route("/housekeeping", methods=["GET", "POST"])
+def housekeeping():
+    if "user" not in session: return redirect(url_for("login"))
+    conn = sqlite3.connect("francois_resort.db")
+    
+    if request.method == "POST":
+        room_number = int(request.form["room_number"])
+        h_status = request.form["housekeeping_status"]
+        conn.execute("UPDATE rooms SET housekeeping_status = ? WHERE room_number = ?", (h_status, room_number))
+        conn.commit()
+        conn.close()
+        return redirect(url_for("housekeeping"))
+        
+    rooms_list = conn.execute("SELECT room_number, room_type, status, floor, housekeeping_status FROM rooms ORDER BY room_number").fetchall()
+    conn.close()
+    
+    hk_html = """
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold text-slate-800">Housekeeping Control Deck</h1>
+        <p class="text-slate-500 text-sm">Real-time status tracking and clean workflows across resort inventory.</p>
+    </div>
+    <div class="grid grid-cols-1 xl:grid-cols-3 gap-8">
+        <div class="bg-white p-6 rounded-2xl border shadow-sm h-fit">
+            <h3 class="text-md font-bold text-slate-700 mb-3">Update Environmental Status</h3>
+            <form method="POST" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 uppercase mb-2">Room Selection</label>
+                    <select name="room_number" required class="w-full px-4 py-2.5 border rounded-xl bg-slate-50 text-sm focus:outline-none">
+                        {% for r in rooms_list %}<option value="{{ r[0] }}">Room {{ r[0] }} ({{ r[1] }})</option>{% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 uppercase mb-2">Housekeeping Lifecycle State</label>
+                    <select name="housekeeping_status" required class="w-full px-4 py-2.5 border rounded-xl bg-slate-50 text-sm focus:outline-none">
+                        <option value="Dirty">⚠️ Dirty (Needs Attention)</option>
+                        <option value="Cleaning">🧹 Cleaning (In Progress)</option>
+                        <option value="Inspected">✨ Inspected (Ready for Check-In)</option>
+                    </select>
+                </div>
+                <button type="submit" class="w-full py-3 bg-emerald-500 text-white font-semibold rounded-xl">Broadcast Status Update</button>
+            </form>
+        </div>
+        <div class="bg-white p-6 rounded-2xl border shadow-sm xl:col-span-2">
+            <div class="overflow-x-auto max-h-[500px] border rounded-xl">
+                <table class="w-full text-left">
+                    <tr class="bg-slate-50 text-xs text-slate-400 border-b"><th class="p-4">Room No</th><th class="p-4">Type</th><th class="p-4">Floor</th><th class="p-4">Front Desk</th><th class="p-4">Housekeeping Status</th></tr>
+                    {% for r in rooms_list %}
+                    <tr class="text-sm border-b hover:bg-slate-50">
+                        <td class="p-4 font-bold">#{{ r[0] }}</td>
+                        <td class="p-4">{{ r[1] }}</td>
+                        <td class="p-4">Level {{ r[3] }}</td>
+                        <td class="p-4"><span class="text-xs px-2 py-0.5 rounded {% if r[2]=='Available' %} bg-emerald-50 text-emerald-700 {% else %} bg-slate-100 text-slate-600 {% endif %}">{{ r[2] }}</span></td>
+                        <td class="p-4">
+                            <span class="px-2.5 py-1 rounded-full text-xs font-bold {% if r[4]=='Inspected' %} bg-emerald-50 text-emerald-600 {% elif r[4]=='Cleaning' %} bg-amber-50 text-amber-600 {% else %} bg-rose-50 text-rose-600 {% endif %}">
+                                {% if r[4]=='Inspected' %} ✨ Inspected {% elif r[4]=='Cleaning' %} 🧹 Cleaning {% else %} ⚠️ Dirty {% endif %}
+                            </span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </table>
+            </div>
+        </div>
+    </div>
+    """
+    return render_template_string(BASE_LAYOUT, title="Housekeeping", active="housekeeping", content=render_template_string(hk_html, rooms_list=rooms_list))
 
 @app.route("/bookings", methods=["GET", "POST"])
 def bookings():
@@ -392,12 +517,11 @@ def bookings():
         
         if action == "cancel_booking":
             booking_id = int(request.form["booking_id"])
-            # Get room number linked to booking to free it back up
             target_booking = conn.execute("SELECT room_number FROM bookings WHERE id = ?", (booking_id,)).fetchone()
             if target_booking:
                 room_no = target_booking[0]
-                conn.execute("UPDATE rooms SET status = 'Available' WHERE room_number = ?", (room_no,))
-            # Remove booking registry cleanly
+                # High-End Rule: When a guest checks out/cancels, Front desk frees the room, but sets housekeeping to 'Dirty' for cleaning!
+                conn.execute("UPDATE rooms SET status = 'Available', housekeeping_status = 'Dirty' WHERE room_number = ?", (room_no,))
             conn.execute("DELETE FROM bookings WHERE id = ?", (booking_id,))
             conn.commit()
             
@@ -418,7 +542,7 @@ def bookings():
         conn.close()
         return redirect(url_for("bookings"))
         
-    available_selection = conn.execute("SELECT room_number, room_type, price FROM rooms WHERE status='Available'").fetchall()
+    available_selection = conn.execute("SELECT room_number, room_type, price FROM rooms WHERE status='Available' AND housekeeping_status='Inspected'").fetchall()
     history_logs = conn.execute("SELECT id, guest_name, room_number, check_in, check_out, amount, phone FROM bookings ORDER BY id DESC").fetchall()
     conn.close()
 
@@ -426,7 +550,6 @@ def bookings():
     <div class="mb-8"><h1 class="text-3xl font-bold text-slate-800">Booking Processing Engine</h1></div>
     <div class="grid grid-cols-1 xl:grid-cols-3 gap-8">
         <div class="space-y-6">
-            <!-- Form 1: Reserve Booking Slot -->
             <div class="bg-white p-6 rounded-2xl border shadow-sm h-fit">
                 <h3 class="text-md font-bold text-slate-700 mb-3">Process Reservation</h3>
                 <form method="POST" class="space-y-4">
@@ -435,7 +558,7 @@ def bookings():
                     <input type="text" name="phone" placeholder="Phone Number" required class="w-full px-4 py-2.5 border rounded-xl bg-slate-50 text-sm focus:outline-none">
                     <input type="email" name="email" placeholder="Email Address" class="w-full px-4 py-2.5 border rounded-xl bg-slate-50 text-sm focus:outline-none">
                     <select name="room" required id="room_select" onchange="updatePrice()" class="w-full px-4 py-2.5 border rounded-xl bg-slate-50 text-sm focus:outline-none">
-                        <option value="">-- Select Available Room --</option>
+                        <option value="">-- Select Available & Inspected Room --</option>
                         {% for rm in available_selection %}<option value="{{ rm[0] }}" data-price="{{ rm[2] }}">Room {{ rm[0] }} - {{ rm[1] }}</option>{% endfor %}
                     </select>
                     <div class="grid grid-cols-2 gap-4">
@@ -450,7 +573,6 @@ def bookings():
                 </form>
             </div>
             
-            <!-- Form 2: Quick Remove/Cancel Slot -->
             <div class="bg-white p-6 rounded-2xl border border-rose-100 shadow-sm h-fit">
                 <h3 class="text-md font-bold text-rose-800 mb-3">Cancel Active Booking Slot</h3>
                 <form method="POST" onsubmit="return confirm('Release room allocation and remove booking record?');" class="space-y-4">
@@ -466,7 +588,6 @@ def bookings():
             </div>
         </div>
         
-        <!-- Table Log History Output Display Summary Workspace -->
         <div class="bg-white p-6 rounded-2xl border shadow-sm xl:col-span-2">
             <div class="overflow-x-auto max-h-[580px] border rounded-xl">
                 <table class="w-full text-left">
@@ -491,45 +612,26 @@ def bookings():
         </div>
     </div>
     <script>
-        function updatePrice() {
-            calculateAutoPrice();
-        }
-        
+        function updatePrice() { calculateAutoPrice(); }
         function calculateAutoPrice() {
             var select = document.getElementById('room_select');
             var selectedOption = select.options[select.selectedIndex];
             var basePrice = selectedOption.getAttribute('data-price');
-            
-            if (!basePrice) {
-                document.getElementById('amount_input').value = '';
-                return;
-            }
-            
+            if (!basePrice) { document.getElementById('amount_input').value = ''; return; }
             var checkinVal = document.getElementById('checkin').value;
             var checkoutVal = document.getElementById('checkout').value;
-            
             if (checkinVal && checkoutVal) {
                 var d1 = new Date(checkinVal);
                 var d2 = new Date(checkoutVal);
                 var timeDiff = d2.getTime() - d1.getTime();
                 var days = Math.ceil(timeDiff / (1000 * 3600 * 24));
-                
-                if (days > 0) {
-                    // Automatically adjusts calculation based on duration (e.g., 8 days for a week and a day)
-                    document.getElementById('amount_input').value = (parseFloat(basePrice) * days).toFixed(2);
-                } else {
-                    document.getElementById('amount_input').value = parseFloat(basePrice).toFixed(2);
-                }
-            } else {
-                document.getElementById('amount_input').value = parseFloat(basePrice).toFixed(2);
-            }
+                if (days > 0) { document.getElementById('amount_input').value = (parseFloat(basePrice) * days).toFixed(2); }
+                else { document.getElementById('amount_input').value = parseFloat(basePrice).toFixed(2); }
+            } else { document.getElementById('amount_input').value = parseFloat(basePrice).toFixed(2); }
         }
     </script>
     """
     return render_template_string(BASE_LAYOUT, title="Bookings", active="bookings", content=render_template_string(bookings_html, available_selection=available_selection, history_logs=history_logs))
-
-
-# ========================= UNLOCKED DIRECTORY WORKSPACES =========================
 
 @app.route("/customers")
 def customers():
@@ -574,21 +676,17 @@ def customers():
 def staff():
     if "user" not in session: return redirect(url_for("login"))
     conn = sqlite3.connect("francois_resort.db")
-    
     if request.method == "POST":
         action = request.form.get("action_type")
-        
         if action == "remove_staff":
             staff_id = int(request.form["staff_id"])
             conn.execute("DELETE FROM staff_members WHERE id = ?", (staff_id,))
             conn.commit()
-
         elif action == "adjust_salary":
             staff_id = int(request.form["staff_id"])
             new_salary = float(request.form["new_salary"])
             conn.execute("UPDATE staff_members SET salary = ? WHERE id = ?", (new_salary, staff_id))
             conn.commit()
-        
         else:
             name = request.form["name"]
             role = request.form["role"]
@@ -596,82 +694,31 @@ def staff():
             phone = request.form["phone"]
             conn.execute("INSERT INTO staff_members(name, role, salary, phone) VALUES(?,?,?,?)", (name, role, salary, phone))
             conn.commit()
-            
         return redirect(url_for("staff"))
-    
     staff_list = conn.execute("SELECT * FROM staff_members").fetchall()
     conn.close()
 
     staff_html = """
-    <div class="mb-8">
-        <h1 class="text-3xl font-bold text-slate-800">Staff & Employee Management</h1>
-        <p class="text-slate-500 text-sm">Register internal hotel staff roles, salary index sheets, and contacts.</p>
-    </div>
+    <div class="mb-8"><h1 class="text-3xl font-bold text-slate-800">Staff Management</h1></div>
     <div class="grid grid-cols-1 xl:grid-cols-3 gap-8">
         <div class="space-y-6">
-            <div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm h-fit">
-                <h3 class="text-lg font-bold text-slate-800 mb-4">Onboard New Employee</h3>
+            <div class="bg-white p-6 rounded-2xl border h-fit">
                 <form method="POST" class="space-y-4">
                     <input type="hidden" name="action_type" value="onboard">
                     <input type="text" name="name" placeholder="Full Name" required class="w-full px-4 py-2.5 border rounded-xl bg-slate-50 text-sm focus:outline-none">
-                    <input type="text" name="role" placeholder="Role (e.g. Concierge, Accountant)" required class="w-full px-4 py-2.5 border rounded-xl bg-slate-50 text-sm focus:outline-none">
+                    <input type="text" name="role" placeholder="Role Designation" required class="w-full px-4 py-2.5 border rounded-xl bg-slate-50 text-sm focus:outline-none">
                     <input type="number" name="salary" placeholder="Monthly Salary (KES)" required class="w-full px-4 py-2.5 border rounded-xl bg-slate-50 text-sm focus:outline-none">
                     <input type="text" name="phone" placeholder="Phone Contact" required class="w-full px-4 py-2.5 border rounded-xl bg-slate-50 text-sm focus:outline-none">
                     <button type="submit" class="w-full py-3 bg-emerald-500 text-white font-semibold rounded-xl">Register Staff Member</button>
                 </form>
             </div>
-
-            <div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm h-fit">
-                <h3 class="text-lg font-bold text-slate-800 mb-4">Restructure Staff Salary</h3>
-                <form method="POST" class="space-y-4">
-                    <input type="hidden" name="action_type" value="adjust_salary">
-                    <div>
-                        <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Select Onboarded Employee</label>
-                        <select name="staff_id" required class="w-full px-4 py-3 border border-slate-200 rounded-xl bg-slate-50 text-sm focus:outline-none">
-                            {% for s in staff_list %}<option value="{{ s[0] }}">{{ s[1] }} ({{ s[2] }})</option>{% endfor %}
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">New Restructured Salary (KES)</label>
-                        <input type="number" step="0.01" name="new_salary" placeholder="Enter updated wage index" required class="w-full px-4 py-3 border border-slate-200 rounded-xl bg-slate-50 text-sm focus:outline-none">
-                    </div>
-                    <button type="submit" class="w-full py-3 bg-amber-500 text-white font-semibold rounded-xl transition duration-150 hover:bg-amber-600">Update Salary Structure</button>
-                </form>
-            </div>
-
-            <div class="bg-white p-6 rounded-2xl border border-rose-100 shadow-sm h-fit">
-                <h3 class="text-lg font-bold text-rose-800 mb-4">Remove Staff Member</h3>
-                <form method="POST" onsubmit="return confirm('Are you sure you want to completely offboard this staff member?');" class="space-y-4">
-                    <input type="hidden" name="action_type" value="remove_staff">
-                    <div>
-                        <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Select Staff Target</label>
-                        <select name="staff_id" required class="w-full px-4 py-3 border border-slate-200 rounded-xl bg-slate-50 text-sm focus:outline-none">
-                            {% for s in staff_list %}<option value="{{ s[0] }}">{{ s[1] }} [ID: #{{ s[0] }}]</option>{% endfor %}
-                        </select>
-                    </div>
-                    <button type="submit" class="w-full py-3 bg-rose-600 text-white font-semibold rounded-xl transition duration-150 hover:bg-rose-700 shadow-md shadow-rose-200">Terminate Profile</button>
-                </form>
-            </div>
         </div>
-        
-        <div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm xl:col-span-2">
-            <div class="overflow-x-auto rounded-xl border">
+        <div class="bg-white p-6 rounded-2xl border shadow-sm xl:col-span-2">
+            <div class="overflow-x-auto border rounded-xl">
                 <table class="w-full text-left">
-                    <tr class="bg-slate-50 text-xs text-slate-400 border-b"><th class="p-4">ID</th><th class="p-4">Name</th><th class="p-4">Role Designation</th><th class="p-4">Salary Base</th><th class="p-4 text-center">Action</th></tr>
+                    <tr class="bg-slate-50 text-xs text-slate-400 border-b"><th class="p-4">Name</th><th class="p-4">Designation</th><th class="p-4">Salary</th></tr>
                     {% for s in staff_list %}
-                    <tr class="text-sm border-b hover:bg-slate-50">
-                        <td class="p-4 text-slate-400">#{{ s[0] }}</td>
-                        <td class="p-4 font-bold text-slate-800">{{ s[1] }}<br><span class="text-xs font-normal text-slate-400">{{ s[4] }}</span></td>
-                        <td class="p-4"><span class="px-2.5 py-1 bg-slate-100 text-slate-700 rounded-md text-xs font-medium">{{ s[2] }}</span></td>
-                        <td class="p-4 font-semibold text-emerald-600">KES {{ "{:,.2f}".format(s[3]) }}</td>
-                        <td class="p-4 text-center">
-                            <form method="POST" onsubmit="return confirm('Permanently delete {{ s[1] }} from system directory?');" class="inline">
-                                <input type="hidden" name="action_type" value="remove_staff">
-                                <input type="hidden" name="staff_id" value="{{ s[0] }}">
-                                <button type="submit" class="text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 transition">Delete</button>
-                            </form>
-                        </td>
-                    </tr>
+                    <tr class="text-sm border-b hover:bg-slate-50"><td class="p-4 font-bold">{{ s[1] }}</td><td class="p-4">{{ s[2] }}</td><td class="p-4 font-semibold text-emerald-600">KES {{ "{:,.2f}".format(s[3]) }}</td></tr>
                     {% endfor %}
                 </table>
             </div>
@@ -691,44 +738,26 @@ def pricing():
         conn.execute("UPDATE rooms SET price = ? WHERE room_type = ? AND status='Available'", (new_rate, room_type))
         conn.commit()
         return redirect(url_for("pricing"))
-    
     pricing_list = conn.execute("SELECT * FROM pricing_rates").fetchall()
     conn.close()
 
     pricing_html = """
-    <div class="mb-8">
-        <h1 class="text-3xl font-bold text-slate-800">Global Pricing Strategy Matrix</h1>
-        <p class="text-slate-500 text-sm">Batch modify baseline room rates. Updates will auto-apply instantly across all available inventory matches.</p>
-    </div>
+    <div class="mb-8"><h1 class="text-3xl font-bold text-slate-800">Global Pricing Matrix</h1></div>
     <div class="grid grid-cols-1 xl:grid-cols-3 gap-8">
-        <div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm h-fit">
-            <h3 class="text-lg font-bold text-slate-800 mb-4">Update Tier Category Rate</h3>
+        <div class="bg-white p-6 rounded-2xl border h-fit">
             <form method="POST" class="space-y-4">
-                <div>
-                    <label class="block text-xs font-semibold text-slate-400 uppercase mb-2">Room Type Tier</label>
-                    <select name="room_type" required class="w-full px-4 py-3 border rounded-xl bg-slate-50 text-sm focus:outline-none">
-                        {% for p in pricing_list %}<option value="{{ p[0] }}">{{ p[0] }}</option>{% endfor %}
-                    </select>
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold text-slate-400 uppercase mb-2">New Core Rate (KES)</label>
-                    <input type="number" name="rate" placeholder="e.g. 20000" required class="w-full px-4 py-3 border rounded-xl bg-slate-50 text-sm focus:outline-none">
-                </div>
-                <button type="submit" class="w-full py-3 bg-emerald-500 text-white font-semibold rounded-xl">Broadcast Global Rate Alteration</button>
+                <select name="room_type" required class="w-full px-4 py-3 border rounded-xl bg-slate-50 text-sm focus:outline-none">
+                    {% for p in pricing_list %}<option value="{{ p[0] }}">{{ p[0] }}</option>{% endfor %}
+                </select>
+                <input type="number" name="rate" placeholder="New Core Rate (KES)" required class="w-full px-4 py-3 border rounded-xl bg-slate-50 text-sm focus:outline-none">
+                <button type="submit" class="w-full py-3 bg-emerald-500 text-white font-semibold rounded-xl">Broadcast Rate Alteration</button>
             </form>
         </div>
-        <div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm xl:col-span-2">
-            <div class="overflow-x-auto rounded-xl border">
-                <table class="w-full text-left">
-                    <tr class="bg-slate-50 text-xs text-slate-400 border-b"><th class="p-4">Room Structural Tier Class</th><th class="p-4">Configured Active Base Rate</th></tr>
-                    {% for p in pricing_list %}
-                    <tr class="text-sm border-b hover:bg-slate-50">
-                        <td class="p-4 font-bold text-slate-800">{{ p[0] }}</td>
-                        <td class="p-4 font-bold text-emerald-600">KES {{ "{:,.2f}".format(p[1]) }}</td>
-                    </tr>
-                    {% endfor %}
-                </table>
-            </div>
+        <div class="bg-white p-6 rounded-2xl border xl:col-span-2">
+            <table class="w-full text-left">
+                <tr class="bg-slate-50 text-xs text-slate-400 border-b"><th class="p-4">Structural Class</th><th class="p-4">Active Base Rate</th></tr>
+                {% for p in pricing_list %}<tr><td class="p-4 font-bold">{{ p[0] }}</td><td class="p-4 font-bold text-emerald-600">KES {{ "{:,.2f}".format(p[1]) }}</td></tr>{% endfor %}
+            </table>
         </div>
     </div>
     """
