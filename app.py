@@ -170,6 +170,22 @@ def init_db():
         created_at TEXT
     )""")
 
+    # 8. Active Sessions Table (track logged-in staff)
+    cursor.execute("""CREATE TABLE IF NOT EXISTS active_sessions(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE,
+        login_time TEXT,
+        role TEXT
+    )""")
+
+    # 8. Active Sessions Table (track logged-in staff)
+    cursor.execute("""CREATE TABLE IF NOT EXISTS active_sessions(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE,
+        login_time TEXT,
+        role TEXT
+    )""")
+
     conn.commit()
     conn.close()
 
@@ -327,6 +343,12 @@ def login():
         conn.close()
         if user and check_password_hash(user[2], password):
             session["user"] = username
+            # Record login in active_sessions
+            conn = sqlite3.connect(DB_PATH)
+            conn.execute("INSERT OR REPLACE INTO active_sessions(username, login_time, role) VALUES(?, ?, ?)",
+                        (username, date.today().isoformat(), user[3]))
+            conn.commit()
+            conn.close()
             return redirect(url_for("dashboard"))
     return """
     <!DOCTYPE html>
@@ -356,7 +378,9 @@ def dashboard():
     available_rooms = conn.execute("SELECT COUNT(*) FROM rooms WHERE status='Available'").fetchone()[0]
     total_bookings = conn.execute("SELECT COUNT(*) FROM bookings WHERE status='Confirmed'").fetchone()[0]
     total_collections = conn.execute("SELECT IFNULL(SUM(amount), 0) FROM bookings").fetchone()[0]
-    # admin users are not displayed on dashboard (shown only in staff backend)
+    
+    # Get currently logged-in staff
+    logged_in_staff = conn.execute("SELECT username, role, login_time FROM active_sessions ORDER BY login_time DESC").fetchall()
     
     breakdown = {}
     types = ["Standard", "Deluxe", "Executive", "Presidential Suite", "Double", "Twin", "Junior Suite"]
@@ -443,8 +467,24 @@ def dashboard():
             options: {{ cutout: '75%', responsive: true, plugins: {{ legend: {{ display: false }} }} }}
         }});
     </script>
+
+    <div class="mt-8 bg-white p-6 rounded-2xl border border-emerald-100 shadow-sm">
+        <h3 class="text-lg font-bold text-slate-800 mb-4">Live Users in System</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {{% if not logged_in_staff %}}
+            <div class="col-span-full text-center text-slate-400 py-4">No active sessions</div>
+            {{% endif %}}
+            {{% for staff in logged_in_staff %}}
+            <div class="bg-gradient-to-br from-emerald-50 to-emerald-100 p-4 rounded-xl border border-emerald-200">
+                <p class="font-semibold text-emerald-800">{{{{ staff[0] }}}}</p>
+                <p class="text-xs text-emerald-600">{{{{ staff[1] }}}}</p>
+                <p class="text-xs text-emerald-500 mt-2">Logged in: {{{{ staff[2] }}}}</p>
+            </div>
+            {{% endfor %}}
+        </div>
+    </div>
     """
-    return render_template_string(BASE_LAYOUT, title="Dashboard", active="dashboard", content=render_template_string(dashboard_html, total_bookings=total_bookings, available_rooms=available_rooms, total_rooms=total_rooms))
+    return render_template_string(BASE_LAYOUT, title="Dashboard", active="dashboard", content=render_template_string(dashboard_html, total_bookings=total_bookings, available_rooms=available_rooms, total_rooms=total_rooms, logged_in_staff=logged_in_staff))
 
 @app.route("/rooms", methods=["GET", "POST"])
 def rooms():
@@ -1014,7 +1054,13 @@ def search():
 
 @app.route("/logout")
 def logout():
-    session.clear()
+    username = session.pop("user", None)
+    if username:
+        # Remove from active_sessions
+        conn = sqlite3.connect(DB_PATH)
+        conn.execute("DELETE FROM active_sessions WHERE username=?", (username,))
+        conn.commit()
+        conn.close()
     return redirect(url_for("login"))
 
 if __name__ == "__main__":
