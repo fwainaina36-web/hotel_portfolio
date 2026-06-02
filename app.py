@@ -1,12 +1,15 @@
 from flask import Flask, request, redirect, url_for, session, render_template_string
+import os
 import sqlite3
 from datetime import date
 
 app = Flask(__name__)
 app.secret_key = "francois_secret_key_2026"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(BASE_DIR, "francois_resort.db")
 
 def init_db():
-    conn = sqlite3.connect("francois_resort.db")
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
     # 1. Users Table
@@ -75,9 +78,47 @@ def init_db():
     )""")
 
     # Seed Admin User
-    cursor.execute("INSERT OR IGNORE INTO users(username, password, role) VALUES(?, ?, ?)", 
-                  ("Francis Mbugua", "FM@2026", "Director"))
-    
+    admin_users = [
+        ("Francis Mbugua", "FM@2026", "Director"),
+        ("Ashley Warui", "AW@2025", "General Manager"),
+        ("Joseph Kamaru", "JK@2025", "Front Desk Manager"),
+        ("Emily Njeri", "EN@2025", "Housekeeping Supervisor"),
+        ("Michael Otieno", "MO@2025", "Maintenance Supervisor"),
+        ("Grace Wanjiku", "GW@2025", "Concierge"),
+        ("David Mwangi", "DM@2025", "Chef"),
+        ("Sophia Kimani", "SK@2025", "Event Coordinator"),
+        ("James Kamau", "JK@2025", "Security Chief"),
+        ("Linda Achieng", "LA@2025", "Spa Manager"),
+        ("Robert Ndegwa", "RN@2025", "IT Manager"),
+        ("Patricia Wairimu", "PW@2025", "HR Manager"),
+        ("Daniel Muthoni", "DM@2025", "Finance Manager"),
+        ("Karen Mwende", "KM@2025", "Marketing Manager"),
+        ("Samuel Kariuki", "SK@2025", "Sales Manager"),
+        ("Lisa Njeri", "LN@2025", "Housekeeping Staff"),
+        ("Mark Otieno", "MO@2025", "Maintenance Staff"),
+        ("Anna Wanjiku", "AW@2025", "Front Desk Staff"),
+        ("John Kamau", "JK@2025", "Security Staff"),
+        ("Emily Mwangi", "EM@2025", "Concierge Staff"),
+        ("Michael Ndegwa", "MN@2025", "IT Support Staff"),
+        ("Sarah Wairimu", "SW@2025", "HR Assistant"),
+        ("David Mutua", "DM@2025", "Finance Assistant"),
+        ("Grace Mwende", "GM@2025", "Marketing Assistant"),
+        ("James Muthomi", "JM@2025", "Sales Assistant"),
+        ("Linda Njeri", "LN@2025", "Housekeeping Intern"),
+        ("Mark Mwangi", "MM@2025", "Maintenance Intern"),
+        ("Anna Kamau", "AK@2025", "Front Desk Intern"),
+        ("John Wanjiku", "JW@2025", "Security Intern")
+    ]
+    cursor.executemany("INSERT OR IGNORE INTO users(username, password, role) VALUES(?, ?, ?)", admin_users)
+    # Ensure admin users are also present in staff_members, but exclude Directors (board-level)
+    staff_from_admin = [(u[0], u[2], 0, "") for u in admin_users if "director" not in u[2].lower()]
+    if staff_from_admin:
+        cursor.executemany("INSERT OR IGNORE INTO staff_members(name, role, salary, phone) VALUES(?,?,?,?)", staff_from_admin)
+
+    # Remove any Director entries from staff_members to keep board separate
+    for u in admin_users:
+        if "director" in u[2].lower():
+            cursor.execute("DELETE FROM staff_members WHERE name = ? AND role = ?", (u[0], u[2]))
     # Seed Hotel Information
     cursor.execute("INSERT OR IGNORE INTO hotel VALUES(1, 'Francois Grand Royal Resort & Spa', 'Francis Mbugua', 'Joseph Kamaru', 350, 200, 70)")
 
@@ -96,8 +137,33 @@ def init_db():
 
     # Seed Baseline Pricing Structures
     rates = [("Standard", 18500), ("Deluxe", 28500), ("Executive", 42000), 
-             ("Presidential Suite", 95000), ("Double", 22500), ("Twin", 23500), ("Junior Suite", 55000)]
+             ("Presidential Suite", 98000), ("Double", 22500), ("Twin", 23500), ("Junior Suite", 55000)]
     cursor.executemany("INSERT OR IGNORE INTO pricing_rates VALUES(?,?)", rates)
+
+    # Seed Default Staff Members if table empty
+    cursor.execute("SELECT COUNT(*) FROM staff_members")
+    if cursor.fetchone()[0] == 0:
+        staff_defaults = [
+            ("Alice Wanjiku", "Receptionist", 45000, "+254711223344"),
+            ("John Mwangi", "Head Chef", 100000, "+254711223344"),
+            ("Ian Pkiach", "IT", 120000, "+254722568972"),
+            ("Christine Ogola", "Front Office Manager", 120000, "+254727362663"),
+            ("Obadiah Mutisio", "General Manager", 230000, "+254722808690")
+        ]
+        cursor.executemany("INSERT OR IGNORE INTO staff_members(name, role, salary, phone) VALUES(?,?,?,?)", staff_defaults)
+
+    # 7. Guest Requests Table (public-facing requests from guests)
+    cursor.execute("""CREATE TABLE IF NOT EXISTS guest_requests(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        guest_name TEXT,
+        room_number INTEGER,
+        request_type TEXT,
+        details TEXT,
+        phone TEXT,
+        email TEXT,
+        status TEXT DEFAULT 'Open',
+        created_at TEXT
+    )""")
 
     conn.commit()
     conn.close()
@@ -167,10 +233,10 @@ BASE_LAYOUT = """
     <div class="flex-1 ml-72 flex flex-col">
         <!-- Top Sticky Header with Dropdown Engine -->
         <header class="bg-white border-b border-slate-100 px-10 py-4 flex items-center justify-between sticky top-0 z-50">
-            <div class="relative w-96">
-                <input type="text" placeholder="Search here..." class="w-full bg-slate-100 text-sm pl-5 pr-10 py-2.5 rounded-full border border-transparent focus:outline-none focus:border-emerald-500 transition">
-                <span class="absolute right-4 top-3 text-slate-400 text-sm">🔍</span>
-            </div>
+            <form action="/search" method="get" class="relative w-96">
+                <input type="search" name="q" placeholder="Search guests, rooms, staff..." class="w-full bg-slate-100 text-sm pl-5 pr-10 py-2.5 rounded-full border border-transparent focus:outline-none focus:border-emerald-500 transition">
+                <button type="submit" class="absolute right-2 top-2 text-slate-400 text-sm px-2 py-1">🔍</button>
+            </form>
             
             <div class="flex items-center gap-6 relative">
                 <!-- Interactive Bell Button -->
@@ -251,7 +317,7 @@ def login():
     if request.method == "POST":
         username = request.form.get("username")
         password = request.form.get("password")
-        conn = sqlite3.connect("francois_resort.db")
+        conn = sqlite3.connect(DB_PATH)
         user = conn.execute("SELECT * FROM users WHERE username=? AND password=?", (username, password)).fetchone()
         conn.close()
         if user:
@@ -280,11 +346,12 @@ def login():
 @app.route("/dashboard")
 def dashboard():
     if "user" not in session: return redirect(url_for("login"))
-    conn = sqlite3.connect("francois_resort.db")
+    conn = sqlite3.connect(DB_PATH)
     total_rooms = conn.execute("SELECT COUNT(*) FROM rooms").fetchone()[0]
     available_rooms = conn.execute("SELECT COUNT(*) FROM rooms WHERE status='Available'").fetchone()[0]
     total_bookings = conn.execute("SELECT COUNT(*) FROM bookings WHERE status='Confirmed'").fetchone()[0]
     total_collections = conn.execute("SELECT IFNULL(SUM(amount), 0) FROM bookings").fetchone()[0]
+    # admin users are not displayed on dashboard (shown only in staff backend)
     
     breakdown = {}
     types = ["Standard", "Deluxe", "Executive", "Presidential Suite", "Double", "Twin", "Junior Suite"]
@@ -315,8 +382,6 @@ def dashboard():
             <div><p class="text-2xl font-bold text-slate-800">KES {total_collections:,.0f}</p><p class="text-sm font-medium text-slate-400 mt-1">Collections</p></div>
             <div class="text-indigo-500 bg-indigo-50 p-3 rounded-xl text-xl">💵</div>
         </div>
-    </div>
-
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm lg:col-span-2">
             <h3 class="text-lg font-bold text-slate-800 mb-4">VISITORS</h3>
@@ -379,7 +444,7 @@ def dashboard():
 @app.route("/rooms", methods=["GET", "POST"])
 def rooms():
     if "user" not in session: return redirect(url_for("login"))
-    conn = sqlite3.connect("francois_resort.db")
+    conn = sqlite3.connect(DB_PATH)
     if request.method == "POST":
         room_number = int(request.form["room_number"])
         new_status = request.form.get("status")
@@ -444,7 +509,7 @@ def rooms():
 @app.route("/housekeeping", methods=["GET", "POST"])
 def housekeeping():
     if "user" not in session: return redirect(url_for("login"))
-    conn = sqlite3.connect("francois_resort.db")
+    conn = sqlite3.connect(DB_PATH)
     
     if request.method == "POST":
         room_number = int(request.form["room_number"])
@@ -510,7 +575,7 @@ def housekeeping():
 @app.route("/bookings", methods=["GET", "POST"])
 def bookings():
     if "user" not in session: return redirect(url_for("login"))
-    conn = sqlite3.connect("francois_resort.db")
+    conn = sqlite3.connect(DB_PATH)
     
     if request.method == "POST":
         action = request.form.get("action_type", "create")
@@ -636,7 +701,7 @@ def bookings():
 @app.route("/customers")
 def customers():
     if "user" not in session: return redirect(url_for("login"))
-    conn = sqlite3.connect("francois_resort.db")
+    conn = sqlite3.connect(DB_PATH)
     customer_logs = conn.execute("SELECT DISTINCT guest_name, phone, email, booking_date FROM bookings ORDER BY booking_date DESC").fetchall()
     conn.close()
 
@@ -675,7 +740,7 @@ def customers():
 @app.route("/staff", methods=["GET", "POST"])
 def staff():
     if "user" not in session: return redirect(url_for("login"))
-    conn = sqlite3.connect("francois_resort.db")
+    conn = sqlite3.connect(DB_PATH)
     if request.method == "POST":
         action = request.form.get("action_type")
         if action == "remove_staff":
@@ -696,10 +761,30 @@ def staff():
             conn.commit()
         return redirect(url_for("staff"))
     staff_list = conn.execute("SELECT * FROM staff_members").fetchall()
+    hr_row = conn.execute("SELECT name FROM staff_members WHERE lower(role) LIKE '%human%' OR lower(role) LIKE '%hr%' LIMIT 1").fetchone()
+    gm_row = conn.execute("SELECT name FROM staff_members WHERE lower(role) LIKE '%general manager%' LIMIT 1").fetchone()
+    accounts_row = conn.execute("SELECT name FROM staff_members WHERE lower(role) LIKE '%account%' OR lower(role) LIKE '%finance%' LIMIT 1").fetchone()
+    hr_name = hr_row[0] if hr_row else None
+    gm_name = gm_row[0] if gm_row else None
+    accounts_name = accounts_row[0] if accounts_row else None
     conn.close()
 
     staff_html = """
     <div class="mb-8"><h1 class="text-3xl font-bold text-slate-800">Staff Management</h1></div>
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+        <div class="bg-white p-4 rounded-2xl border">
+            <h4 class="text-sm font-semibold text-slate-700">General Manager</h4>
+            <p class="text-sm text-slate-600">{{ gm_name if gm_name else 'Vacant' }}</p>
+        </div>
+        <div class="bg-white p-4 rounded-2xl border">
+            <h4 class="text-sm font-semibold text-slate-700">Human Resource Manager</h4>
+            <p class="text-sm text-slate-600">{{ hr_name if hr_name else 'Vacant' }}</p>
+        </div>
+        <div class="bg-white p-4 rounded-2xl border">
+            <h4 class="text-sm font-semibold text-slate-700">Accounts Office</h4>
+            <p class="text-sm text-slate-600">{{ accounts_name if accounts_name else 'Vacant' }}</p>
+        </div>
+    </div>
     <div class="grid grid-cols-1 xl:grid-cols-3 gap-8">
         <div class="space-y-6">
             <div class="bg-white p-6 rounded-2xl border h-fit">
@@ -716,21 +801,38 @@ def staff():
         <div class="bg-white p-6 rounded-2xl border shadow-sm xl:col-span-2">
             <div class="overflow-x-auto border rounded-xl">
                 <table class="w-full text-left">
-                    <tr class="bg-slate-50 text-xs text-slate-400 border-b"><th class="p-4">Name</th><th class="p-4">Designation</th><th class="p-4">Salary</th></tr>
+                    <tr class="bg-slate-50 text-xs text-slate-400 border-b"><th class="p-4">Name</th><th class="p-4">Designation</th><th class="p-4">Salary</th><th class="p-4">Action</th></tr>
                     {% for s in staff_list %}
-                    <tr class="text-sm border-b hover:bg-slate-50"><td class="p-4 font-bold">{{ s[1] }}</td><td class="p-4">{{ s[2] }}</td><td class="p-4 font-semibold text-emerald-600">KES {{ "{:,.2f}".format(s[3]) }}</td></tr>
+                    <tr class="text-sm border-b hover:bg-slate-50">
+                        <td class="p-4 font-bold">{{ s[1] }}</td>
+                        <td class="p-4">{{ s[2] }}</td>
+                        <td class="p-4 font-semibold text-emerald-600">KES {{ "{:,.2f}".format(s[3]) }}</td>
+                        <td class="p-4">
+                            <form method="POST" onsubmit="return confirm('Remove {{ s[1] }} from staff list?');" class="inline">
+                                <input type="hidden" name="action_type" value="remove_staff">
+                                <input type="hidden" name="staff_id" value="{{ s[0] }}">
+                                <button type="submit" class="text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 transition">Remove</button>
+                            </form>
+                            <form method="POST" onsubmit="return confirm('Adjust salary for {{ s[1] }}?');" class="inline ml-2">
+                                <input type="hidden" name="action_type" value="adjust_salary">
+                                <input type="hidden" name="staff_id" value="{{ s[0] }}">
+                                <input type="number" step="0.01" name="new_salary" placeholder="New salary" class="w-28 px-2 py-1 border rounded text-sm inline">
+                                <button type="submit" class="text-xs font-semibold px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100">Update</button>
+                            </form>
+                        </td>
+                    </tr>
                     {% endfor %}
                 </table>
             </div>
         </div>
     </div>
     """
-    return render_template_string(BASE_LAYOUT, title="Staff", active="staff", content=render_template_string(staff_html, staff_list=staff_list))
+    return render_template_string(BASE_LAYOUT, title="Staff", active="staff", content=render_template_string(staff_html, staff_list=staff_list, gm_name=gm_name, hr_name=hr_name, accounts_name=accounts_name))
 
 @app.route("/pricing", methods=["GET", "POST"])
 def pricing():
     if "user" not in session: return redirect(url_for("login"))
-    conn = sqlite3.connect("francois_resort.db")
+    conn = sqlite3.connect(DB_PATH)
     if request.method == "POST":
         room_type = request.form["room_type"]
         new_rate = float(request.form["rate"])
@@ -762,6 +864,148 @@ def pricing():
     </div>
     """
     return render_template_string(BASE_LAYOUT, title="Pricing", active="pricing", content=render_template_string(pricing_html, pricing_list=pricing_list))
+
+
+@app.route("/requests", methods=["GET", "POST"]) 
+def guest_requests():
+    # Public form for guests to submit service requests
+    if request.method == "POST":
+        guest_name = request.form.get("guest_name")
+        room_number = request.form.get("room_number")
+        try:
+            room_number = int(room_number) if room_number else None
+        except ValueError:
+            room_number = None
+        request_type = request.form.get("request_type")
+        details = request.form.get("details")
+        phone = request.form.get("phone")
+        email = request.form.get("email")
+        conn = sqlite3.connect(DB_PATH)
+        conn.execute("INSERT INTO guest_requests(guest_name, room_number, request_type, details, phone, email, created_at) VALUES(?,?,?,?,?,?,?)",
+                     (guest_name, room_number, request_type, details, phone, email, date.today().isoformat()))
+        conn.commit()
+        conn.close()
+        return redirect(url_for("guest_requests", thanks=1))
+
+    conn = sqlite3.connect(DB_PATH)
+    recent = conn.execute("SELECT id, guest_name, room_number, request_type, status, created_at FROM guest_requests ORDER BY id DESC LIMIT 10").fetchall()
+    conn.close()
+
+    requests_html = """
+    <div class="mb-8"><h1 class="text-3xl font-bold text-slate-800">Guest Requests</h1>
+    <p class="text-slate-500 text-sm">Use this form to request services or report issues to hotel staff.</p></div>
+    <div class="grid grid-cols-1 xl:grid-cols-3 gap-8">
+        <div class="bg-white p-6 rounded-2xl border h-fit">
+            <form method="POST" class="space-y-4">
+                <input type="text" name="guest_name" placeholder="Full Name" required class="w-full px-4 py-2.5 border rounded-xl bg-slate-50 text-sm focus:outline-none">
+                <input type="number" name="room_number" placeholder="Room Number (optional)" class="w-full px-4 py-2.5 border rounded-xl bg-slate-50 text-sm focus:outline-none">
+                <select name="request_type" required class="w-full px-4 py-2.5 border rounded-xl bg-slate-50 text-sm focus:outline-none">
+                    <option value="Housekeeping">Housekeeping</option>
+                    <option value="Maintenance">Maintenance</option>
+                    <option value="Food & Beverage">Food & Beverage</option>
+                    <option value="Front Desk">Front Desk</option>
+                    <option value="Other">Other</option>
+                </select>
+                <textarea name="details" placeholder="Describe your request" required class="w-full px-4 py-2.5 border rounded-xl bg-slate-50 text-sm focus:outline-none"></textarea>
+                <input type="text" name="phone" placeholder="Phone Number" class="w-full px-4 py-2.5 border rounded-xl bg-slate-50 text-sm focus:outline-none">
+                <input type="email" name="email" placeholder="Email (optional)" class="w-full px-4 py-2.5 border rounded-xl bg-slate-50 text-sm focus:outline-none">
+                <button type="submit" class="w-full py-3 bg-emerald-500 text-white font-semibold rounded-xl">Send Request</button>
+            </form>
+        </div>
+        <div class="bg-white p-6 rounded-2xl border shadow-sm xl:col-span-2">
+            <h3 class="text-lg font-bold text-slate-800 mb-4">Recent Guest Requests</h3>
+            <div class="overflow-x-auto border rounded-xl">
+                <table class="w-full text-left">
+                    <tr class="bg-slate-50 text-xs text-slate-400 border-b"><th class="p-4">Guest</th><th class="p-4">Room</th><th class="p-4">Type</th><th class="p-4">Status</th><th class="p-4">Date</th></tr>
+                    {% for r in recent %}
+                    <tr class="text-sm border-b hover:bg-slate-50"><td class="p-4 font-bold">{{ r[1] }}</td><td class="p-4">{{ r[2] if r[2] else 'N/A' }}</td><td class="p-4">{{ r[3] }}</td><td class="p-4">{{ r[4] }}</td><td class="p-4">{{ r[5] }}</td></tr>
+                    {% endfor %}
+                </table>
+            </div>
+        </div>
+    </div>
+    """
+
+    return render_template_string(BASE_LAYOUT, title="Guest Requests", active="", content=render_template_string(requests_html, recent=recent))
+
+
+@app.route('/search')
+def search():
+    q = request.args.get('q', '').strip()
+    if not q:
+        return redirect(url_for('dashboard'))
+
+    conn = sqlite3.connect(DB_PATH)
+    pattern = f"%{q}%"
+
+    # Rooms: exact number or type/description match
+    rooms_by_number = []
+    if q.isdigit():
+        rooms_by_number = conn.execute("SELECT room_number, room_type, status, price FROM rooms WHERE room_number = ?", (int(q),)).fetchall()
+    rooms_by_text = conn.execute("SELECT room_number, room_type, status, price FROM rooms WHERE room_type LIKE ? OR description LIKE ?", (pattern, pattern)).fetchall()
+
+    # Guests / bookings
+    guests = conn.execute("SELECT id, guest_name, room_number, check_in, check_out FROM bookings WHERE guest_name LIKE ? ORDER BY id DESC", (pattern,)).fetchall()
+
+    # Staff
+    staff = conn.execute("SELECT id, name, role, phone FROM staff_members WHERE name LIKE ? OR role LIKE ? ORDER BY id DESC", (pattern, pattern)).fetchall()
+
+    conn.close()
+
+    search_html = """
+    <div class="mb-8"><h1 class="text-3xl font-bold text-slate-800">Search Results</h1>
+    <p class="text-slate-500 text-sm">Results for: <strong>{{ q }}</strong></p></div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div class="bg-white p-6 rounded-2xl border shadow-sm lg:col-span-2">
+            <h3 class="text-lg font-bold text-slate-800 mb-4">Guests / Bookings</h3>
+            <div class="overflow-x-auto border rounded-xl">
+                <table class="w-full text-left">
+                    <tr class="bg-slate-50 text-xs text-slate-400 border-b"><th class="p-4">Guest</th><th class="p-4">Room</th><th class="p-4">Stay</th></tr>
+                    {% if not guests %}
+                    <tr><td colspan="3" class="p-8 text-center text-slate-400">No guest matches found.</td></tr>
+                    {% endif %}
+                    {% for g in guests %}
+                    <tr class="text-sm border-b hover:bg-slate-50"><td class="p-4 font-bold">{{ g[1] }}</td><td class="p-4">{{ g[2] }}</td><td class="p-4 text-xs">In: {{ g[3] }} • Out: {{ g[4] }}</td></tr>
+                    {% endfor %}
+                </table>
+            </div>
+
+            <h3 class="text-lg font-bold text-slate-800 mb-4 mt-6">Room Matches</h3>
+            <div class="overflow-x-auto border rounded-xl">
+                <table class="w-full text-left">
+                    <tr class="bg-slate-50 text-xs text-slate-400 border-b"><th class="p-4">Room</th><th class="p-4">Type</th><th class="p-4">Status</th><th class="p-4">Rate</th></tr>
+                    {% for r in rooms_by_number %}
+                    <tr class="text-sm border-b hover:bg-slate-50"><td class="p-4 font-bold">#{{ r[0] }}</td><td class="p-4">{{ r[1] }}</td><td class="p-4">{{ r[2] }}</td><td class="p-4 font-semibold">KES {{ "{:,.2f}".format(r[3]) }}</td></tr>
+                    {% endfor %}
+                    {% for r in rooms_by_text %}
+                    <tr class="text-sm border-b hover:bg-slate-50"><td class="p-4 font-bold">#{{ r[0] }}</td><td class="p-4">{{ r[1] }}</td><td class="p-4">{{ r[2] }}</td><td class="p-4 font-semibold">KES {{ "{:,.2f}".format(r[3]) }}</td></tr>
+                    {% endfor %}
+                    {% if not rooms_by_number and not rooms_by_text %}
+                    <tr><td colspan="4" class="p-8 text-center text-slate-400">No room matches found.</td></tr>
+                    {% endif %}
+                </table>
+            </div>
+        </div>
+
+        <div class="bg-white p-6 rounded-2xl border shadow-sm">
+            <h3 class="text-lg font-bold text-slate-800 mb-4">Staff Matches</h3>
+            <div class="overflow-x-auto border rounded-xl">
+                <table class="w-full text-left">
+                    <tr class="bg-slate-50 text-xs text-slate-400 border-b"><th class="p-4">Name</th><th class="p-4">Role</th><th class="p-4">Phone</th></tr>
+                    {% if not staff %}
+                    <tr><td colspan="3" class="p-8 text-center text-slate-400">No staff matches found.</td></tr>
+                    {% endif %}
+                    {% for s in staff %}
+                    <tr class="text-sm border-b hover:bg-slate-50"><td class="p-4 font-bold">{{ s[1] }}</td><td class="p-4">{{ s[2] }}</td><td class="p-4">{{ s[3] }}</td></tr>
+                    {% endfor %}
+                </table>
+            </div>
+        </div>
+    </div>
+    """
+
+    return render_template_string(BASE_LAYOUT, title="Search", active="", content=render_template_string(search_html, q=q, guests=guests, rooms_by_number=rooms_by_number, rooms_by_text=rooms_by_text, staff=staff))
 
 @app.route("/logout")
 def logout():
