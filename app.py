@@ -191,6 +191,25 @@ def init_db():
 
 init_db()
 
+def get_current_user_info():
+    """Helper function to get current user's name, role, and initials from session"""
+    if "user" not in session:
+        return "Guest", "User", "G"
+    
+    username = session.get("user")
+    conn = sqlite3.connect(DB_PATH)
+    user = conn.execute("SELECT username, role FROM users WHERE username=?", (username,)).fetchone()
+    conn.close()
+    
+    if not user:
+        return "Guest", "User", "G"
+    
+    user_name = user[0]
+    user_role = user[1]
+    user_initials = "".join([w[0].upper() for w in user_name.split()])
+    
+    return user_name, user_role, user_initials
+
 # ========================= BASE LAYOUT TEMPLATE =========================
 # ========================= BASE LAYOUT TEMPLATE =========================
 BASE_LAYOUT = """
@@ -240,10 +259,10 @@ BASE_LAYOUT = """
         </div>
         <div class="p-6 border-t border-slate-800">
             <div class="flex items-center gap-3 mb-4">
-                <div class="w-10 h-10 bg-emerald-600 rounded-full flex items-center justify-center font-bold text-white">FM</div>
+                <div class="w-10 h-10 bg-emerald-600 rounded-full flex items-center justify-center font-bold text-white">{{ current_user_initials }}</div>
                 <div>
-                    <p class="text-sm font-semibold text-white">Francis Mbugua</p>
-                    <p class="text-xs text-slate-400">Director</p>
+                    <p class="text-sm font-semibold text-white">{{ current_user_name }}</p>
+                    <p class="text-xs text-slate-400">{{ current_user_role }}</p>
                 </div>
             </div>
             <a href="/logout" class="block text-center bg-slate-800 hover:bg-rose-900/40 text-rose-400 hover:text-rose-300 py-2.5 rounded-xl text-sm font-medium transition">Logout</a>
@@ -373,11 +392,33 @@ def login():
 @app.route("/dashboard")
 def dashboard():
     if "user" not in session: return redirect(url_for("login"))
+    
+    current_user_name, current_user_role, current_user_initials = get_current_user_info()
+    
     conn = sqlite3.connect(DB_PATH)
+    
+    # Room & Booking Metrics
     total_rooms = conn.execute("SELECT COUNT(*) FROM rooms").fetchone()[0]
     available_rooms = conn.execute("SELECT COUNT(*) FROM rooms WHERE status='Available'").fetchone()[0]
+    occupied_rooms = conn.execute("SELECT COUNT(*) FROM rooms WHERE status='Occupied'").fetchone()[0]
     total_bookings = conn.execute("SELECT COUNT(*) FROM bookings WHERE status='Confirmed'").fetchone()[0]
     total_collections = conn.execute("SELECT IFNULL(SUM(amount), 0) FROM bookings").fetchone()[0]
+    
+    # Guest Tracking Metrics
+    today = date.today().isoformat()
+    checked_in_guests = conn.execute(
+        "SELECT COUNT(*) FROM bookings WHERE status='Confirmed' AND check_in <= ? AND check_out >= ?", 
+        (today, today)
+    ).fetchone()[0]
+    todays_checkins = conn.execute(
+        "SELECT COUNT(*) FROM bookings WHERE status='Confirmed' AND check_in = ?", (today,)
+    ).fetchone()[0]
+    todays_checkouts = conn.execute(
+        "SELECT COUNT(*) FROM bookings WHERE status='Confirmed' AND check_out = ?", (today,)
+    ).fetchone()[0]
+    
+    # Occupancy Percentage
+    occupancy_pct = round((occupied_rooms / total_rooms * 100) if total_rooms > 0 else 0, 1)
     
     # Get currently logged-in staff
     logged_in_staff = conn.execute("SELECT username, role, login_time FROM active_sessions ORDER BY login_time DESC").fetchall()
@@ -468,6 +509,41 @@ def dashboard():
         }});
     </script>
 
+    <div class="mt-8 grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div class="bg-gradient-to-br from-blue-50 to-blue-100 p-6 rounded-2xl border border-blue-200 shadow-sm">
+            <div class="flex items-center justify-between mb-3">
+                <p class="text-xs font-semibold text-blue-600 uppercase">Checked-In Guests</p>
+                <span class="text-2xl">🏠</span>
+            </div>
+            <p class="text-3xl font-bold text-blue-900">{{checked_in_guests}}</p>
+            <p class="text-xs text-blue-600 mt-2">Currently in hotel</p>
+        </div>
+        <div class="bg-gradient-to-br from-purple-50 to-purple-100 p-6 rounded-2xl border border-purple-200 shadow-sm">
+            <div class="flex items-center justify-between mb-3">
+                <p class="text-xs font-semibold text-purple-600 uppercase">Today's Check-Ins</p>
+                <span class="text-2xl">📥</span>
+            </div>
+            <p class="text-3xl font-bold text-purple-900">{{todays_checkins}}</p>
+            <p class="text-xs text-purple-600 mt-2">Expected arrivals</p>
+        </div>
+        <div class="bg-gradient-to-br from-orange-50 to-orange-100 p-6 rounded-2xl border border-orange-200 shadow-sm">
+            <div class="flex items-center justify-between mb-3">
+                <p class="text-xs font-semibold text-orange-600 uppercase">Today's Check-Outs</p>
+                <span class="text-2xl">📤</span>
+            </div>
+            <p class="text-3xl font-bold text-orange-900">{{todays_checkouts}}</p>
+            <p class="text-xs text-orange-600 mt-2">Departures today</p>
+        </div>
+        <div class="bg-gradient-to-br from-red-50 to-red-100 p-6 rounded-2xl border border-red-200 shadow-sm">
+            <div class="flex items-center justify-between mb-3">
+                <p class="text-xs font-semibold text-red-600 uppercase">Occupancy Rate</p>
+                <span class="text-2xl">📊</span>
+            </div>
+            <p class="text-3xl font-bold text-red-900">{{occupancy_pct}}%</p>
+            <p class="text-xs text-red-600 mt-2">{{occupied_rooms}}/{{total_rooms}} rooms</p>
+        </div>
+    </div>
+
     <div class="mt-8 bg-white p-6 rounded-2xl border border-emerald-100 shadow-sm">
         <h3 class="text-lg font-bold text-slate-800 mb-4">Live Users in System</h3>
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -484,11 +560,27 @@ def dashboard():
         </div>
     </div>
     """
-    return render_template_string(BASE_LAYOUT, title="Dashboard", active="dashboard", content=render_template_string(dashboard_html, total_bookings=total_bookings, available_rooms=available_rooms, total_rooms=total_rooms, logged_in_staff=logged_in_staff))
+    return render_template_string(BASE_LAYOUT, 
+        title="Dashboard", 
+        active="dashboard", 
+        current_user_name=current_user_name,
+        current_user_role=current_user_role,
+        current_user_initials=current_user_initials,
+        content=render_template_string(dashboard_html, 
+            total_bookings=total_bookings, 
+            available_rooms=available_rooms, 
+            total_rooms=total_rooms,
+            occupied_rooms=occupied_rooms,
+            occupancy_pct=occupancy_pct,
+            checked_in_guests=checked_in_guests,
+            todays_checkins=todays_checkins,
+            todays_checkouts=todays_checkouts,
+            logged_in_staff=logged_in_staff))
 
 @app.route("/rooms", methods=["GET", "POST"])
 def rooms():
     if "user" not in session: return redirect(url_for("login"))
+    current_user_name, current_user_role, current_user_initials = get_current_user_info()
     conn = sqlite3.connect(DB_PATH)
     if request.method == "POST":
         room_number = int(request.form["room_number"])
@@ -549,11 +641,12 @@ def rooms():
         </div>
     </div>
     """
-    return render_template_string(BASE_LAYOUT, title="Rooms", active="rooms", content=render_template_string(rooms_html, rooms_list=rooms_list))
+    return render_template_string(BASE_LAYOUT, title="Rooms", active="rooms", current_user_name=current_user_name, current_user_role=current_user_role, current_user_initials=current_user_initials, content=render_template_string(rooms_html, rooms_list=rooms_list))
 
 @app.route("/housekeeping", methods=["GET", "POST"])
 def housekeeping():
     if "user" not in session: return redirect(url_for("login"))
+    current_user_name, current_user_role, current_user_initials = get_current_user_info()
     conn = sqlite3.connect(DB_PATH)
     
     if request.method == "POST":
@@ -615,11 +708,12 @@ def housekeeping():
         </div>
     </div>
     """
-    return render_template_string(BASE_LAYOUT, title="Housekeeping", active="housekeeping", content=render_template_string(hk_html, rooms_list=rooms_list))
+    return render_template_string(BASE_LAYOUT, title="Housekeeping", active="housekeeping", current_user_name=current_user_name, current_user_role=current_user_role, current_user_initials=current_user_initials, content=render_template_string(hk_html, rooms_list=rooms_list))
 
 @app.route("/bookings", methods=["GET", "POST"])
 def bookings():
     if "user" not in session: return redirect(url_for("login"))
+    current_user_name, current_user_role, current_user_initials = get_current_user_info()
     conn = sqlite3.connect(DB_PATH)
     
     if request.method == "POST":
@@ -741,11 +835,12 @@ def bookings():
         }
     </script>
     """
-    return render_template_string(BASE_LAYOUT, title="Bookings", active="bookings", content=render_template_string(bookings_html, available_selection=available_selection, history_logs=history_logs))
+    return render_template_string(BASE_LAYOUT, title="Bookings", active="bookings", current_user_name=current_user_name, current_user_role=current_user_role, current_user_initials=current_user_initials, content=render_template_string(bookings_html, available_selection=available_selection, history_logs=history_logs))
 
 @app.route("/customers")
 def customers():
     if "user" not in session: return redirect(url_for("login"))
+    current_user_name, current_user_role, current_user_initials = get_current_user_info()
     conn = sqlite3.connect(DB_PATH)
     customer_logs = conn.execute("SELECT DISTINCT guest_name, phone, email, booking_date FROM bookings ORDER BY booking_date DESC").fetchall()
     conn.close()
@@ -780,11 +875,12 @@ def customers():
         </div>
     </div>
     """
-    return render_template_string(BASE_LAYOUT, title="Customers", active="customers", content=render_template_string(customers_html, customer_logs=customer_logs))
+    return render_template_string(BASE_LAYOUT, title="Customers", active="customers", current_user_name=current_user_name, current_user_role=current_user_role, current_user_initials=current_user_initials, content=render_template_string(customers_html, customer_logs=customer_logs))
 
 @app.route("/staff", methods=["GET", "POST"])
 def staff():
     if "user" not in session: return redirect(url_for("login"))
+    current_user_name, current_user_role, current_user_initials = get_current_user_info()
     conn = sqlite3.connect(DB_PATH)
     if request.method == "POST":
         action = request.form.get("action_type")
@@ -872,7 +968,7 @@ def staff():
         </div>
     </div>
     """
-    return render_template_string(BASE_LAYOUT, title="Staff", active="staff", content=render_template_string(staff_html, staff_list=staff_list, gm_name=gm_name, hr_name=hr_name, accounts_name=accounts_name))
+    return render_template_string(BASE_LAYOUT, title="Staff", active="staff", current_user_name=current_user_name, current_user_role=current_user_role, current_user_initials=current_user_initials, content=render_template_string(staff_html, staff_list=staff_list, gm_name=gm_name, hr_name=hr_name, accounts_name=accounts_name))
 
 @app.route("/pricing", methods=["GET", "POST"])
 def pricing():
@@ -908,7 +1004,7 @@ def pricing():
         </div>
     </div>
     """
-    return render_template_string(BASE_LAYOUT, title="Pricing", active="pricing", content=render_template_string(pricing_html, pricing_list=pricing_list))
+    return render_template_string(BASE_LAYOUT, title="Pricing", active="pricing", current_user_name=current_user_name, current_user_role=current_user_role, current_user_initials=current_user_initials, content=render_template_string(pricing_html, pricing_list=pricing_list))
 
 
 @app.route("/requests", methods=["GET", "POST"]) 
@@ -971,7 +1067,7 @@ def guest_requests():
     </div>
     """
 
-    return render_template_string(BASE_LAYOUT, title="Guest Requests", active="", content=render_template_string(requests_html, recent=recent))
+    return render_template_string(BASE_LAYOUT, title="Guest Requests", active="", current_user_name=current_user_name, current_user_role=current_user_role, current_user_initials=current_user_initials, content=render_template_string(requests_html, recent=recent))
 
 
 @app.route('/search')
@@ -1050,7 +1146,7 @@ def search():
     </div>
     """
 
-    return render_template_string(BASE_LAYOUT, title="Search", active="", content=render_template_string(search_html, q=q, guests=guests, rooms_by_number=rooms_by_number, rooms_by_text=rooms_by_text, staff=staff))
+    return render_template_string(BASE_LAYOUT, title="Search", active="", current_user_name=current_user_name, current_user_role=current_user_role, current_user_initials=current_user_initials, content=render_template_string(search_html, q=q, guests=guests, rooms_by_number=rooms_by_number, rooms_by_text=rooms_by_text, staff=staff))
 
 @app.route("/logout")
 def logout():
