@@ -2,9 +2,13 @@ from flask import Flask, request, redirect, url_for, session, render_template_st
 import os
 import sqlite3
 from datetime import date
+from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
-app.secret_key = "francois_secret_key_2026"
+app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'francois_secret_key_2026')
+app.config['SESSION_COOKIE_SECURE'] = True
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "francois_resort.db")
 
@@ -77,7 +81,7 @@ def init_db():
         base_rate REAL
     )""")
 
-    # Seed Admin User
+    # Seed Admin User with hashed passwords
     admin_users = [
         ("Francis Mbugua", "FM@2026", "Director"),
         ("Ashley Warui", "AW@2025", "General Manager"),
@@ -109,7 +113,8 @@ def init_db():
         ("Anna Kamau", "AK@2025", "Front Desk Intern"),
         ("John Wanjiku", "JW@2025", "Security Intern")
     ]
-    cursor.executemany("INSERT OR IGNORE INTO users(username, password, role) VALUES(?, ?, ?)", admin_users)
+    hashed_users = [(u[0], generate_password_hash(u[1], method='pbkdf2:sha256'), u[2]) for u in admin_users]
+    cursor.executemany("INSERT OR IGNORE INTO users(username, password, role) VALUES(?, ?, ?)", hashed_users)
     # Ensure admin users are also present in staff_members, but exclude Directors (board-level)
     staff_from_admin = [(u[0], u[2], 0, "") for u in admin_users if "director" not in u[2].lower()]
     if staff_from_admin:
@@ -318,9 +323,9 @@ def login():
         username = request.form.get("username")
         password = request.form.get("password")
         conn = sqlite3.connect(DB_PATH)
-        user = conn.execute("SELECT * FROM users WHERE username=? AND password=?", (username, password)).fetchone()
+        user = conn.execute("SELECT * FROM users WHERE username=?", (username,)).fetchone()
         conn.close()
-        if user:
+        if user and check_password_hash(user[2], password):
             session["user"] = username
             return redirect(url_for("dashboard"))
     return """
@@ -1013,4 +1018,5 @@ def logout():
     return redirect(url_for("login"))
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    debug_mode = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
+    app.run(debug=debug_mode, port=5000)
